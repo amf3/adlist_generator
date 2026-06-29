@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=./server_config.schema.json
+#
+# This is a recursive resolver config, which means the local instance will contact
+# the root servers when querying records.  It does not rely on upstream dns services like
+# 1.1.1.1 (Cloudflare) or 8.8.8.8 (Google).
+#
+# Unbound server configuration.
+# Run 'python -m src.main --dump-schema' to regenerate the schema file.
+# All keys use underscores here; the generator converts them to hyphens in
+# the output unbound.conf.
+
+# --- Network ---
+port: 53
+interface:
+  - "0.0.0.0"
+do_ip4: true
+do_ip6: false
+
+# access_control entries are rendered as 'access-control: <subnet> <action>'
+# Valid actions: deny, refuse, allow, allow_snoop, deny_non_local, refuse_non_local
+access_control:
+  - subnet: "127.0.0.1/32"
+    action: "allow"
+  - subnet: "192.168.0.0/16"
+    action: "allow"
+  - subnet: "0.0.0.0/0"
+    action: "refuse"
+
+# --- Threading and cache ---
+num_threads: 1
+msg_cache_size: "4m"
+rrset_cache_size: "8m"
+
+# --- Privacy and hardening ---
+hide_identity: true
+hide_version: true
+harden_glue: true
+harden_dnssec_stripped: true
+
+# --- Logging ---
+verbosity: 0
+use_syslog: false
+log_queries: false
+log_replies: false
+log_time_ascii: true

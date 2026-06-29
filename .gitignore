@@ -1,3 +1,10 @@
+# Generated output — environment-specific, track in a private repo alongside configs/
+dist/
+# Personal configuration — never commit to the public repo
+configs/
+
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -1,0 +1,14 @@
+[project]
+name = "adlist_generator"
+version = "0.1.0"
+description = "Unbound DNS configuration compiler with blocklist deduplication and local DNS support"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.black]
+line-length = 88
+target-version = ["py311", "py312", "py313", "py314"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

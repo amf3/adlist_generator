@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=./adlists_sources.schema.json
+#
+# Blocklists to fetch and merge.
+# Supported formats:
+#   domains   — one bare domain per line (default)
+#   hosts     — /etc/hosts style: '0.0.0.0 domain.com' or '127.0.0.1 domain.com'
+#   adblock   — AdBlock Plus filter syntax: '||domain.com^'
+#
+# The build_summary.txt generated after each run includes an overlap matrix
+# and recommendations for removing redundant lists.
+
+sources:
+  # AdBlock Plus format — '||domain.com^' syntax
+  - url: "https://big.oisd.nl/"
+    format: "adblock"
+
+  # domains format — one bare domain per line
+  - url: "https://v.firebog.net/hosts/AdguardDNS.txt"
+    format: "domains"
+
+  # hosts format — /etc/hosts style with 0.0.0.0 or 127.0.0.1 prefix
+  - url: "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+    format: "hosts"

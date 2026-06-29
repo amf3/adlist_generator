@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=./local_dns.schema.json
+#
+# Local split-horizon DNS records.
+# This file is optional. If absent, the generator skips local record injection.
+#
+# Supported record types: A, AAAA, CNAME, SRV
+# auto_ptr: true generates a reverse PTR record automatically.
+#
+# Supported policies:
+#   static        — authoritative; serves your records, no upstream forwarding
+#   transparent   — serves your records, falls through to upstream for others
+#   inform        — logs queries, resolves normally
+#   always_nxdomain — blocks the domain entirely (useful for overriding)
+#   redirect      — redirects queries to a specified address
+#   refuse        — refuses queries with REFUSED rcode
+#   deny          — drops queries silently
+
+local_dns:
+  - domain: "router.lan"
+    policy: "static"
+    auto_ptr: true
+    records:
+      A: "192.168.1.1"
+
+  - domain: "nas.lan"
+    policy: "static"
+    auto_ptr: true
+    records:
+      A: "192.168.1.10"
+
+  - domain: "files.lan"
+    policy: "static"
+    auto_ptr: false
+    records:
+      CNAME: "nas.lan"
