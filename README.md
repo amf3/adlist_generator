@@ -5,45 +5,12 @@ approach (blocking `tracker.com` automatically covers `ads1.tracker.com`,
 `ads2.tracker.com`, and any future subdomains), and writes the result as
 [Unbound DNS](https://nlnetlabs.nl/projects/unbound/about/) configuration files.
 
-Also supports local split-horizon DNS — A, AAAA, CNAME, SRV records and automatic
-PTR synthesis — and generates a `manifest.reversed` and `build_summary.txt` suitable
+Also supports local split-horizon DNS: A, AAAA, CNAME, SRV records and automatic
+PTR records. Additionally generates a `manifest.reversed` and `build_summary.txt` suitable
 for tracking upstream list changes in git.
 
 The generator runs standalone or as a Docker build stage, producing a minimal Unbound
 container with configs baked in at image build time.
-
-## Background and AI usage
-
-I previously ran Pi-hole for ad blocking, but it doesn't natively support recursive
-DNS queries. I migrated to dnsmasq on my router, which can handle adlists but still
-relies on an upstream resolver like 1.1.1.1 or 8.8.8.8. After evaluating several
-options, Unbound DNS was the best fit. It handles internal records, adlists, and
-can query root servers directly without a forwarder.
-
-I initially migrated my existing shell pipeline (`cat | awk | sort | uniq`) from
-dnsmasq to Unbound, then rewrote it in Python when the scripts became fragile.
-
-The first version was created with Gemini using these specifications:
-
-- Abstract base classes for adlist format parsers
-- SOLID principles with unit test coverage
-- Reversed-FQDN manifest for tracking upstream list changes in git
-- Schema enforcement on all config files
-- Docker pipeline support
-
-I then handed the result to Claude and asked it to critique the project as a grumpy
-senior developer. Claude's contributions:
-
-- Removed emoji strings from code
-- Converted comments from "repeating what the code does" to "explaining why"
-- Strengthened schema enforcement, eliminating an unvalidated passthrough dict
-- Added source attribution tracking and the build summary report
-
-After working with both tools, I read through the full codebase and feel confident
-making changes without AI assistance. This is running in my home lab and has
-replaced two separate sources of truth (router dnsmasq + Unbound) with a single
-authoritative Unbound instance. My router's dnsmasq now uses the local Unbound
-instance as its upstream resolver with no local customizations of its own.
 
 ## How it works
 
@@ -52,11 +19,9 @@ configs/
   adlists_sources.yml     # which public blocklists to fetch and their format
   local_dns.yml           # your local A/AAAA/CNAME/PTR records (optional)
   server_config.yml       # Unbound server directives
-        |
-        v
+        ↓
   adlist_generator        # Fetches adlists, parses, deduplicates, and writes configs
-        |
-        v
+        ↓
 dist/                     # Directory created at run time
   unbound.conf            # main config with conditional includes
   adblock.conf            # always_nxdomain zones from merged blocklists
@@ -69,7 +34,7 @@ dist/                     # Directory created at run time
 
 - Python 3.11+
 - pip dependencies from `requirements.txt`
-- Or Docker with buildx
+- Alternatively Docker buildx or Buildah
 
 ## Setup
 
@@ -129,7 +94,7 @@ cp -r configs.example configs
 # Edit configs/ to match your environment
 ```
 
-The included Dockerfile uses a two-stage build: a Python builder stage fetches the
+The included Dockerfile uses a two stage build: a Python builder stage fetches the
 blocklists and generates the configs, then copies the output into a minimal Unbound
 runtime image.
 
