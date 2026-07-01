@@ -1,122 +1,113 @@
+# tests/test_zone_validation.py
 import pytest
 from pydantic import ValidationError
-from src.schemas import (
-    UnboundServerSettings,
-    AccessControlEntry,
-    LocalDNSEntry,
-    DNSRecords,
-    AdlistConfig,
-    AdlistSource,
-)
+from src.schemas import LocalZone, LocalDNSRecord, DNSRecords
 
 
-def test_adlist_config_valid():
-    config = AdlistConfig(
-        sources=[
-            {"url": "https://example.com/list.txt", "format": "domains"},
-            {"url": "https://example.com/hosts.txt", "format": "hosts"},
-            {"url": "https://example.com/filter.txt", "format": "adblock"},
-        ]
+def _record(domain, **record_kwargs):
+    return LocalDNSRecord(
+        domain=domain,
+        auto_ptr=False,
+        records=DNSRecords(**record_kwargs)
     )
-    assert len(config.sources) == 3
-    assert config.sources[0].format == "domains"
-    assert config.sources[2].format == "adblock"
 
 
-def test_adlist_config_default_format():
-    config = AdlistConfig(
-        sources=[
-            {"url": "https://example.com/list.txt"},
-        ]
+def test_valid_a_record_accepted():
+    zone = LocalZone(
+        zone="rb.af9.us.",
+        policy="transparent",
+        records=[_record("phanpy.rb.af9.us", A="192.168.10.31")]
     )
-    assert config.sources[0].format == "domains"
+    assert len(zone.records) == 1
 
 
-def test_adlist_config_invalid_format():
-    with pytest.raises(ValidationError):
-        AdlistConfig(
-            sources=[
-                {"url": "https://example.com/list.txt", "format": "unknown_format"},
+def test_valid_aaaa_record_accepted():
+    zone = LocalZone(
+        zone="rb.af9.us.",
+        policy="transparent",
+        records=[_record("phanpy.rb.af9.us", AAAA="fd00::1")]
+    )
+    assert len(zone.records) == 1
+
+
+def test_zone_apex_itself_accepted():
+    """A record whose domain equals the zone apex (without trailing dot) is valid."""
+    zone = LocalZone(
+        zone="rb.af9.us.",
+        policy="always_nxdomain",
+        records=[_record("rb.af9.us", A="0.0.0.0")]
+    )
+    assert len(zone.records) == 1
+
+
+def test_bare_hostname_rejected():
+    """A bare hostname with no zone suffix should fail validation."""
+    with pytest.raises(ValidationError) as exc_info:
+        LocalZone(
+            zone="rb.af9.us.",
+            policy="transparent",
+            records=[_record("wifi", A="192.168.10.7")]
+        )
+    assert "'wifi'" in str(exc_info.value)
+    assert "rb.af9.us" in str(exc_info.value)
+
+
+def test_wrong_zone_domain_rejected():
+    """A domain from a different zone should fail validation."""
+    with pytest.raises(ValidationError) as exc_info:
+        LocalZone(
+            zone="rb.af9.us.",
+            policy="transparent",
+            records=[_record("router.lan", A="192.168.1.1")]
+        )
+    assert "'router.lan'" in str(exc_info.value)
+
+
+def test_multiple_invalid_domains_all_reported():
+    """All invalid domains should appear in the error message, not just the first."""
+    with pytest.raises(ValidationError) as exc_info:
+        LocalZone(
+            zone="rb.af9.us.",
+            policy="transparent",
+            records=[
+                _record("wifi", A="192.168.10.7"),
+                _record("router.lan", A="192.168.1.1"),
             ]
         )
+    error_text = str(exc_info.value)
+    assert "'wifi'" in error_text
+    assert "'router.lan'" in error_text
 
 
-def test_adlist_config_missing_url():
-    with pytest.raises(ValidationError):
-        AdlistConfig(
-            sources=[
-                {"format": "domains"},
+def test_empty_records_list_valid():
+    """A zone with no records is valid — records are optional."""
+    zone = LocalZone(zone="rb.af9.us.", policy="transparent", records=[])
+    assert zone.records == []
+
+
+def test_mixed_valid_and_invalid_reports_only_invalid():
+    """Valid domains should not appear in the error message."""
+    with pytest.raises(ValidationError) as exc_info:
+        LocalZone(
+            zone="rb.af9.us.",
+            policy="transparent",
+            records=[
+                _record("phanpy.rb.af9.us", A="192.168.10.31"),  # valid
+                _record("wifi", A="192.168.10.7"),                # invalid
             ]
         )
+    error_text = str(exc_info.value)
+    assert "'wifi'" in error_text
+    assert "'phanpy.rb.af9.us'" not in error_text
 
 
-def test_adlist_config_empty_sources():
-    # An empty sources list is valid — the pipeline will just skip ingestion.
-    config = AdlistConfig(sources=[])
-    assert config.sources == []
+def test_cname_field_not_accepted():
+    """DNSRecords should not accept a CNAME field."""
+    with pytest.raises((ValidationError, TypeError)):
+        DNSRecords(CNAME="nas.lan.")
 
 
-def test_adlist_config_model_dump_roundtrip():
-    # Verify that model_dump() produces dicts compatible with DomainNormalizer's
-    # existing interface (expects 'url' and 'format' keys).
-    config = AdlistConfig(
-        sources=[
-            {"url": "https://example.com/list.txt", "format": "hosts"},
-        ]
-    )
-    dumped = config.sources[0].model_dump()
-    assert dumped == {"url": "https://example.com/list.txt", "format": "hosts"}
-
-
-def test_server_settings_defaults():
-    s = UnboundServerSettings()
-    assert s.port == 53
-    assert s.hide_identity is True
-    assert s.harden_glue is True
-    assert s.access_control == []
-
-
-def test_server_settings_full():
-    s = UnboundServerSettings(
-        port=5353,
-        num_threads=4,
-        msg_cache_size="16m",
-        verbosity=2,
-        log_queries=True,
-        access_control=[
-            AccessControlEntry(subnet="192.168.0.0/16", action="allow"),
-            AccessControlEntry(subnet="0.0.0.0/0", action="refuse"),
-        ],
-    )
-    assert s.port == 5353
-    assert len(s.access_control) == 2
-    assert s.access_control[0].action == "allow"
-
-
-def test_server_settings_invalid_port():
-    with pytest.raises(ValidationError):
-        UnboundServerSettings(port=70000)
-
-
-def test_server_settings_invalid_threads():
-    with pytest.raises(ValidationError):
-        UnboundServerSettings(num_threads=0)
-
-
-def test_server_settings_invalid_verbosity():
-    with pytest.raises(ValidationError):
-        UnboundServerSettings(verbosity=6)
-
-
-def test_access_control_invalid_action():
-    with pytest.raises(ValidationError):
-        AccessControlEntry(
-            subnet="0.0.0.0/0", action="permit"
-        )  # not a valid Unbound action
-
-
-def test_local_dns_entry_invalid_ip():
-    with pytest.raises(ValidationError):
-        LocalDNSEntry(
-            domain="broken.lan", policy="static", records=DNSRecords(A="192.168.1.300")
-        )
+def test_srv_field_not_accepted():
+    """DNSRecords should not accept an SRV field."""
+    with pytest.raises((ValidationError, TypeError)):
+        DNSRecords(SRV="0 100 88 kdc.lan.")

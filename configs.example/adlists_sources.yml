@@ -21,3 +21,4 @@ sources:
   # hosts format — /etc/hosts style with 0.0.0.0 or 127.0.0.1 prefix
   - url: "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
     format: "hosts"
+

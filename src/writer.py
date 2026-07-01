@@ -8,63 +8,59 @@ class ConfigurationWriter:
     """
     Writes the compiled dataset to Unbound configuration files.
 
-    Separates adblock entries (no resource records) from local authority
-    entries (have resource records) so they can be written to distinct
-    include files.
+    Local records are emitted as zone groups: one local-zone directive per
+    zone followed by all local-data entries for hostnames in that zone.
+    This allows Unbound to follow CNAME chains within a transparent zone
+    rather than stopping at each hostname's zone boundary.
+
+    Adblock entries (always_nxdomain, no resource records) are written to
+    a separate adblock.conf include file.
 
     finalized_data is a list of (domain, policy, records, source_url) tuples
     as returned by ReversedDomainTrie.serialize_pruned_tree().
+    local_zones is the ordered list of (zone_name, policy) tuples from the trie.
     """
 
-    # Fields handled by explicit rendering logic rather than the generic loop.
-    # These are either repeated keys, compound values, or need ordering control.
     _SKIP_IN_GENERIC_RENDER = {
-        "port",
-        "interface",
-        "do_ip4",
-        "do_ip6",
-        "access_control",
-        "domain_insecure",
-        "username",
-        "chroot",
-        "do_daemonize",
-        "pidfile",
-        "logfile",
-        "num_threads",
-        "msg_cache_size",
-        "rrset_cache_size",
-        "trust_anchor_file",
-        "root_hints",
-        "so_sndbuf",
-        "so_rcvbuf",
+        "port", "interface", "do_ip4", "do_ip6",
+        "access_control", "domain_insecure",
+        "username", "chroot", "do_daemonize", "pidfile", "logfile",
+        "num_threads", "msg_cache_size", "rrset_cache_size",
+        "trust_anchor_file", "root_hints",
+        "so_sndbuf", "so_rcvbuf",
     }
 
-    def __init__(self, server_settings: UnboundServerSettings, finalized_data: list):
+    def __init__(
+        self,
+        server_settings: UnboundServerSettings,
+        finalized_data: list,
+        local_zones: list[tuple[str, str]] | None = None,
+    ):
         self.settings = server_settings
-        self.adblock_data = [item for item in finalized_data if not item[2]]
-        self.local_data = [item for item in finalized_data if item[2]]
+        self.local_zones = local_zones or []
+
+        # Adblock entries: always_nxdomain policy, no resource records
+        self.adblock_data = [
+            item for item in finalized_data
+            if item[1] == "always_nxdomain" and not item[2]
+        ]
+        # Local record entries: have resource records, sourced from local config
+        self.local_data = [
+            item for item in finalized_data
+            if item[3] == "local"
+        ]
 
     @staticmethod
     def _to_unbound_key(python_name: str) -> str:
-        """Convert a Python underscore field name to an Unbound hyphenated directive."""
         return python_name.replace("_", "-")
 
     @staticmethod
     def _to_unbound_value(value) -> str:
-        """Render a Python value as an Unbound config value string."""
         if isinstance(value, bool):
             return "yes" if value else "no"
         return str(value)
 
     def write_master_unbound_conf(self, output_dir: str) -> None:
-        """
-        Write unbound.conf.
-
-        Directives are grouped by concern to match conventional unbound.conf
-        layout. Repeated-key directives (interface, access-control,
-        domain-insecure) are handled explicitly. All remaining scalar fields
-        are rendered generically so new schema additions appear automatically.
-        """
         filepath = os.path.join(output_dir, "unbound.conf")
         print(f"Writing: {filepath}")
 
@@ -96,8 +92,7 @@ class ConfigurationWriter:
                 f.write(f"  msg-cache-size: {s.msg_cache_size}\n")
                 f.write(f"  rrset-cache-size: {s.rrset_cache_size}\n")
 
-                # --- Remaining scalar fields (TTL, prefetch, privacy, hardening, logging) ---
-                # Rendered generically so new schema fields appear without touching the writer.
+                # --- Remaining scalar fields ---
                 f.write("\n")
                 rendered = s.model_dump(exclude=self._SKIP_IN_GENERIC_RENDER)
                 for python_key, value in rendered.items():
@@ -105,7 +100,7 @@ class ConfigurationWriter:
                     val = self._to_unbound_value(value)
                     f.write(f"  {key}: {val}\n")
 
-                # --- Access control (repeated key) ---
+                # --- Access control ---
                 if s.access_control:
                     f.write("\n")
                     for entry in s.access_control:
@@ -129,54 +124,96 @@ class ConfigurationWriter:
         except IOError as e:
             print(f"Error writing {filepath}: {e}", file=sys.stderr)
 
-    def _write_policy_block(self, filepath: str, title: str, dataset: list) -> None:
+    def write_local_records_conf(self, filepath: str) -> None:
+        """
+        Write local_records.conf.
+
+        Emits one local-zone directive per zone, followed by all local-data
+        entries. PTR records (in-addr.arpa / ip6.arpa) are emitted after
+        the forward zones as bare local-data without a zone declaration since
+        they live in the reverse DNS namespace.
+        """
+        print(f"Writing: {filepath}")
+
+        # Index local-data entries by domain for zone grouping.
+        record_map: dict[str, dict] = {
+            item[0]: item[2] for item in self.local_data
+        }
+
+        # Separate PTR records from forward records.
+        ptr_records = {
+            domain: records
+            for domain, records in record_map.items()
+            if domain.endswith(".in-addr.arpa") or domain.endswith(".ip6.arpa")
+        }
+        forward_records = {
+            domain: records
+            for domain, records in record_map.items()
+            if domain not in ptr_records
+        }
+
         try:
             with open(filepath, "w") as f:
-                f.write(
-                    f"# {title} — generated by adlist_generator. Do not edit manually.\n\n"
-                )
-                for domain, policy, records, _source in dataset:
-                    f.write(f'local-zone: "{domain}" {policy}\n')
-                    if records:
+                f.write("# Local authority records — generated by adlist_generator. Do not edit manually.\n\n")
+
+                # Emit each zone header followed by its member records.
+                for zone_name, zone_policy in self.local_zones:
+                    f.write(f'local-zone: "{zone_name}" {zone_policy}\n')
+
+                    zone_apex = zone_name.rstrip('.')
+                    for domain, records in sorted(forward_records.items()):
+                        if domain == zone_apex or domain.endswith(f".{zone_apex}"):
+                            for rec_type, value in records.items():
+                                f.write(f'local-data: "{domain}. IN {rec_type} {value}"\n')
+                    f.write("\n")
+
+                # PTR records have no zone declaration — they live in the
+                # reverse DNS namespace managed by the OS or upstream resolver.
+                if ptr_records:
+                    for domain, records in sorted(ptr_records.items()):
                         for rec_type, value in records.items():
                             f.write(f'local-data: "{domain}. IN {rec_type} {value}"\n')
+
         except IOError as e:
             print(f"Error writing {filepath}: {e}", file=sys.stderr)
 
     def write_compiled_adblock_conf(self, filepath: str) -> None:
         print(f"Writing: {filepath}")
-        self._write_policy_block(filepath, "Adblock zones", self.adblock_data)
-
-    def write_local_records_conf(self, filepath: str) -> None:
-        print(f"Writing: {filepath}")
-        self._write_policy_block(filepath, "Local authority records", self.local_data)
+        try:
+            with open(filepath, "w") as f:
+                f.write("# Adblock zones — generated by adlist_generator. Do not edit manually.\n\n")
+                for domain, policy, records, _source in self.adblock_data:
+                    f.write(f'local-zone: "{domain}" {policy}\n')
+        except IOError as e:
+            print(f"Error writing {filepath}: {e}", file=sys.stderr)
 
     def write_git_manifest(self, filepath: str) -> None:
         """Write a reversed-label audit log with source attribution."""
         print(f"Writing: {filepath}")
         try:
             with open(filepath, "w") as f:
-                all_data = self.local_data + self.adblock_data
-                for domain, policy, records, source in all_data:
-                    tokens = domain.split(".")
+                # Zone declarations first
+                for zone_name, zone_policy in self.local_zones:
+                    tokens = zone_name.rstrip('.').split('.')
+                    tokens.reverse()
+                    f.write(f"{'.'.join(tokens)} -> {zone_policy} [local:zone]\n")
+
+                # Local records
+                for domain, _policy, records, source in self.local_data:
+                    tokens = domain.split('.')
                     tokens.reverse()
                     reversed_notation = ".".join(tokens)
-
-                    if source == "local":
-                        source_label = "local"
-                    else:
-                        parts = source.rstrip("/").split("/")
-                        source_label = (
-                            "/".join(parts[-2:]) if len(parts) >= 2 else source
-                        )
-
                     if records:
                         record_str = " ".join(f"{k}={v}" for k, v in records.items())
-                        f.write(
-                            f"{reversed_notation} -> {policy} [{source_label}] {{{record_str}}}\n"
-                        )
-                    else:
-                        f.write(f"{reversed_notation} -> {policy} [{source_label}]\n")
+                        f.write(f"{reversed_notation} -> local-data [local] {{{record_str}}}\n")
+
+                # Adblock entries
+                for domain, policy, _records, source in self.adblock_data:
+                    tokens = domain.split('.')
+                    tokens.reverse()
+                    parts = source.rstrip('/').split('/')
+                    source_label = '/'.join(parts[-2:]) if len(parts) >= 2 else source
+                    f.write(f"{'.'.join(tokens)} -> {policy} [{source_label}]\n")
 
         except IOError as e:
             print(f"Error writing {filepath}: {e}", file=sys.stderr)

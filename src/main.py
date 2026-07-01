@@ -1,3 +1,4 @@
+# src/main.py
 import sys
 import os
 import argparse
@@ -10,9 +11,7 @@ from .writer import ConfigurationWriter
 from .reporter import write_build_summary
 
 
-def run_pipeline(
-    sources_path: str, local_dns_path: str, server_config_path: str, output_dir: str
-):
+def run_pipeline(sources_path: str, local_dns_path: str, server_config_path: str, output_dir: str):
     print("Loading server configuration...")
 
     try:
@@ -22,18 +21,16 @@ def run_pipeline(
         print(f"Error: server configuration invalid: {e}", file=sys.stderr)
         sys.exit(1)
 
-    local_entries = []
+    local_zones = []
     if os.path.exists(local_dns_path):
         try:
             with open(local_dns_path) as f:
                 loaded = yaml.safe_load(f)
                 if loaded and "local_dns" in loaded:
                     local_dns_config = LocalDNSConfig(**loaded)
-                    local_entries = local_dns_config.local_dns
+                    local_zones = local_dns_config.local_dns
         except Exception as e:
-            print(
-                f"Warning: local_dns.yml failed schema validation: {e}. Skipping local entries."
-            )
+            print(f"Warning: local_dns.yml failed schema validation: {e}. Skipping local entries.")
     else:
         print(f"Info: '{local_dns_path}' not found. Proceeding without local entries.")
 
@@ -45,9 +42,7 @@ def run_pipeline(
                 adlist_config = AdlistConfig(**loaded)
                 adlist_sources = adlist_config.sources
         except Exception as e:
-            print(
-                f"Warning: adlists_sources.yml failed schema validation: {e}. Skipping."
-            )
+            print(f"Warning: adlists_sources.yml failed schema validation: {e}. Skipping.")
     else:
         print(f"Info: '{sources_path}' not found. Proceeding without adlist sources.")
 
@@ -59,21 +54,21 @@ def run_pipeline(
         print("Ingesting adlist sources...")
         trie.ingest_stream(normalizer.yield_all_domains())
 
-    if local_entries:
+    if local_zones:
         print("Injecting local DNS records...")
-        trie.inject_local_dns(local_entries)
+        trie.inject_local_dns(local_zones)
 
     print("Serializing trie...")
     finalized_dataset = trie.serialize_pruned_tree()
 
-    adblock_entries = [item for item in finalized_dataset if not item[2]]
-    local_record_entries = [
-        item for item in finalized_dataset if item[2] and item[3] == "local"
-    ]
+    adblock_entries = [item for item in finalized_dataset if item[1] == "always_nxdomain" and not item[2]]
+    local_record_entries = [item for item in finalized_dataset if item[3] == "local"]
 
     print("Writing configuration files...")
     writer = ConfigurationWriter(
-        server_settings=server_settings, finalized_data=finalized_dataset
+        server_settings=server_settings,
+        finalized_data=finalized_dataset,
+        local_zones=trie._local_zones,
     )
 
     writer.write_master_unbound_conf(output_dir)
@@ -101,9 +96,9 @@ def run_schema_export():
     os.makedirs(target_dir, exist_ok=True)
 
     schemas = [
-        (AdlistConfig, "adlists_sources.schema.json", "adlists_sources.yml"),
-        (LocalDNSConfig, "local_dns.schema.json", "local_dns.yml"),
-        (UnboundServerSettings, "server_config.schema.json", "server_config.yml"),
+        (AdlistConfig,          "adlists_sources.schema.json", "adlists_sources.yml"),
+        (LocalDNSConfig,        "local_dns.schema.json",       "local_dns.yml"),
+        (UnboundServerSettings, "server_config.schema.json",   "server_config.yml"),
     ]
 
     for model, filename, config_file in schemas:
@@ -118,21 +113,12 @@ def run_schema_export():
 
 def main():
     parser = argparse.ArgumentParser(description="Unbound DNS configuration compiler")
-    parser.add_argument(
-        "--dump-schema",
-        action="store_true",
-        help="Export JSON validation schemas to configs/.",
-    )
-    parser.add_argument(
-        "--config-dir",
-        default="./configs",
-        help="Directory containing configuration files. (Default: ./configs)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default="./dist",
-        help="Directory for generated output files. (Default: ./dist)",
-    )
+    parser.add_argument("--dump-schema", action="store_true",
+                        help="Export JSON validation schemas to configs/.")
+    parser.add_argument("--config-dir", default="./configs",
+                        help="Directory containing configuration files. (Default: ./configs)")
+    parser.add_argument("--output-dir", default="./dist",
+                        help="Directory for generated output files. (Default: ./dist)")
 
     args = parser.parse_args()
 
@@ -148,7 +134,7 @@ def main():
         sources_path=sources_path,
         local_dns_path=local_dns_path,
         server_config_path=server_config_path,
-        output_dir=args.output_dir,
+        output_dir=args.output_dir
     )
 
 

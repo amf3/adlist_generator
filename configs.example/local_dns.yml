@@ -1,35 +1,59 @@
 # yaml-language-server: $schema=./local_dns.schema.json
 #
-# Local split-horizon DNS records.
+# Local split-horizon DNS records, grouped by zone.
 # This file is optional. If absent, the generator skips local record injection.
 #
-# Supported record types: A, AAAA, CNAME, SRV
-# auto_ptr: true generates a reverse PTR record automatically.
+# Each entry in local_dns declares a zone apex and a policy that applies to
+# all hostnames within it. Records are listed under the zone they belong to.
 #
-# Supported policies:
-#   static        — authoritative; serves your records, no upstream forwarding
-#   transparent   — serves your records, falls through to upstream for others
-#   inform        — logs queries, resolves normally
-#   always_nxdomain — blocks the domain entirely (useful for overriding)
+# Only A and AAAA records are supported. Unbound does not expand CNAME chains
+# in local-data context — querying for an A record only returns the first CNAME
+# hop rather than the final address. Use the target IP directly for all aliases.
+# Since configs are generated, there is no maintenance cost to repeating an IP.
+#
+# Zone policy options:
+#   transparent   — serves your local records and recurses upstream for
+#                   names not defined locally. Recommended for most zones.
+#   static        — serves only from local data; returns NXDOMAIN for any
+#                   name not explicitly defined. No upstream recursion.
+#   inform        — resolves normally but logs all queries
+#   always_nxdomain — blocks all names in the zone
 #   redirect      — redirects queries to a specified address
 #   refuse        — refuses queries with REFUSED rcode
 #   deny          — drops queries silently
+#
+# For a one-off policy override within a zone (e.g. blocking a single hostname
+# inside an otherwise transparent zone), declare a second more-specific zone:
+#
+#   - zone: "blocked.lan."
+#     policy: "always_nxdomain"
+#     records:
+#       - domain: "blocked.lan"
+#         auto_ptr: false
+#         records:
+#           A: "0.0.0.0"
+#
+# auto_ptr: true generates a reverse PTR record automatically for A/AAAA entries.
+# Include the trailing dot on zone names.
 
 local_dns:
-  - domain: "router.lan"
-    policy: "static"
-    auto_ptr: true
+  - zone: "lan."
+    policy: "transparent"
     records:
-      A: "192.168.1.1"
 
-  - domain: "nas.lan"
-    policy: "static"
-    auto_ptr: true
-    records:
-      A: "192.168.1.10"
+      - domain: "router.lan"
+        auto_ptr: true
+        records:
+          A: "192.168.1.1"
 
-  - domain: "files.lan"
-    policy: "static"
-    auto_ptr: false
-    records:
-      CNAME: "nas.lan"
+      - domain: "nas.lan"
+        auto_ptr: true
+        records:
+          A: "192.168.1.10"
+
+      # Service aliases point directly to the host IP rather than using CNAMEs,
+      # which Unbound does not resolve in local-data context.
+      - domain: "files.lan"
+        auto_ptr: false
+        records:
+          A: "192.168.1.10"
