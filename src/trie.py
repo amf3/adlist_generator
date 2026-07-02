@@ -24,6 +24,7 @@ class ReversedDomainTrie:
     Internal node metadata uses dunder keys (__policy__, __records__,
     __source__, __zone__) to avoid collisions with domain label tokens.
     """
+
     def __init__(self):
         self.root: Dict[str, Any] = {}
         self.subsumption_counts: Dict[str, int] = defaultdict(int)
@@ -34,10 +35,10 @@ class ReversedDomainTrie:
 
     def _tokenize_and_reverse(self, domain: str) -> List[str]:
         """Split 'ads.example.com' into ['com', 'example', 'ads']."""
-        clean_domain = domain.strip().rstrip('.')
+        clean_domain = domain.strip().rstrip(".")
         if not clean_domain:
             return []
-        tokens = clean_domain.split('.')
+        tokens = clean_domain.split(".")
         tokens.reverse()
         return tokens
 
@@ -70,7 +71,11 @@ class ReversedDomainTrie:
         current_node["__policy__"] = "always_nxdomain"
         current_node["__source__"] = source_url
 
-        keys_to_drop = [k for k in current_node if k not in ("__policy__", "__records__", "__source__")]
+        keys_to_drop = [
+            k
+            for k in current_node
+            if k not in ("__policy__", "__records__", "__source__")
+        ]
         for k in keys_to_drop:
             self._count_and_prune(current_node[k], source_url)
             del current_node[k]
@@ -103,7 +108,7 @@ class ReversedDomainTrie:
         PTR records are synthesized for any A/AAAA entry with auto_ptr=True.
         """
         for zone in local_zones:
-            zone_name = zone.zone.rstrip('.')
+            zone_name = zone.zone.rstrip(".")
             self._local_zones.append((zone.zone, zone.policy))
 
             for record in zone.records:
@@ -172,7 +177,7 @@ class ReversedDomainTrie:
         self,
         current_node: Dict[str, Any],
         current_path: List[str],
-        output_list: List[Tuple[str, str, Dict[str, Any], str]]
+        output_list: List[Tuple[str, str, Dict[str, Any], str]],
     ) -> None:
         policy = current_node.get("__policy__", "")
         records = current_node.get("__records__", {})

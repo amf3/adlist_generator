@@ -6,9 +6,7 @@ from src.schemas import LocalZone, LocalDNSRecord, DNSRecords
 
 def _record(domain, **record_kwargs):
     return LocalDNSRecord(
-        domain=domain,
-        auto_ptr=False,
-        records=DNSRecords(**record_kwargs)
+        domain=domain, auto_ptr=False, records=DNSRecords(**record_kwargs)
     )
 
 
@@ -16,7 +14,7 @@ def test_valid_a_record_accepted():
     zone = LocalZone(
         zone="rb.af9.us.",
         policy="transparent",
-        records=[_record("phanpy.rb.af9.us", A="192.168.10.31")]
+        records=[_record("phanpy.rb.af9.us", A="192.168.10.31")],
     )
     assert len(zone.records) == 1
 
@@ -25,7 +23,7 @@ def test_valid_aaaa_record_accepted():
     zone = LocalZone(
         zone="rb.af9.us.",
         policy="transparent",
-        records=[_record("phanpy.rb.af9.us", AAAA="fd00::1")]
+        records=[_record("phanpy.rb.af9.us", AAAA="fd00::1")],
     )
     assert len(zone.records) == 1
 
@@ -35,7 +33,7 @@ def test_zone_apex_itself_accepted():
     zone = LocalZone(
         zone="rb.af9.us.",
         policy="always_nxdomain",
-        records=[_record("rb.af9.us", A="0.0.0.0")]
+        records=[_record("rb.af9.us", A="0.0.0.0")],
     )
     assert len(zone.records) == 1
 
@@ -46,7 +44,7 @@ def test_bare_hostname_rejected():
         LocalZone(
             zone="rb.af9.us.",
             policy="transparent",
-            records=[_record("wifi", A="192.168.10.7")]
+            records=[_record("wifi", A="192.168.10.7")],
         )
     assert "'wifi'" in str(exc_info.value)
     assert "rb.af9.us" in str(exc_info.value)
@@ -58,7 +56,7 @@ def test_wrong_zone_domain_rejected():
         LocalZone(
             zone="rb.af9.us.",
             policy="transparent",
-            records=[_record("router.lan", A="192.168.1.1")]
+            records=[_record("router.lan", A="192.168.1.1")],
         )
     assert "'router.lan'" in str(exc_info.value)
 
@@ -72,7 +70,7 @@ def test_multiple_invalid_domains_all_reported():
             records=[
                 _record("wifi", A="192.168.10.7"),
                 _record("router.lan", A="192.168.1.1"),
-            ]
+            ],
         )
     error_text = str(exc_info.value)
     assert "'wifi'" in error_text
@@ -93,8 +91,8 @@ def test_mixed_valid_and_invalid_reports_only_invalid():
             policy="transparent",
             records=[
                 _record("phanpy.rb.af9.us", A="192.168.10.31"),  # valid
-                _record("wifi", A="192.168.10.7"),                # invalid
-            ]
+                _record("wifi", A="192.168.10.7"),  # invalid
+            ],
         )
     error_text = str(exc_info.value)
     assert "'wifi'" in error_text

@@ -23,6 +23,7 @@ class DNSRecords(BaseModel):
     misconfigured local_dns.yml fails validation instead of producing a
     local-data entry with no records.
     """
+
     model_config = ConfigDict(extra="forbid")
 
     A: Optional[IPvAnyAddress] = Field(None, description="IPv4 address")
@@ -31,10 +32,10 @@ class DNSRecords(BaseModel):
 
 class LocalDNSRecord(BaseModel):
     """A single hostname entry within a local zone."""
+
     domain: str
     auto_ptr: bool = Field(
-        default=False,
-        description="Synthesize a reverse PTR record for A/AAAA entries."
+        default=False, description="Synthesize a reverse PTR record for A/AAAA entries."
     )
     records: DNSRecords
 
@@ -60,7 +61,10 @@ class LocalZone(BaseModel):
     matches the most specific zone, so foo.rb.af9.us always_nxdomain takes
     precedence over rb.af9.us transparent.
     """
-    zone: str = Field(description="Zone apex (e.g. 'rb.af9.us.'). Include trailing dot.")
+
+    zone: str = Field(
+        description="Zone apex (e.g. 'rb.af9.us.'). Include trailing dot."
+    )
     policy: ZonePolicy
     records: list[LocalDNSRecord] = Field(default_factory=list)
 
@@ -94,6 +98,7 @@ class LocalZone(BaseModel):
 
 class LocalDNSConfig(BaseModel):
     """Root model for local_dns.yml."""
+
     local_dns: list[LocalZone]
 
 
@@ -104,6 +109,7 @@ AccessControlAction = Literal[
 
 class AccessControlEntry(BaseModel):
     """A single access-control directive, e.g. '192.168.0.0/16 allow'."""
+
     subnet: str
     action: AccessControlAction
 
@@ -122,7 +128,7 @@ class UnboundServerSettings(BaseModel):
     port: int = Field(53, ge=1, le=65535)
     interface: list[str] = Field(
         default_factory=lambda: ["0.0.0.0", "::0"],
-        description="Interfaces to listen on."
+        description="Interfaces to listen on.",
     )
     do_ip4: bool = Field(True)
     do_ip6: bool = Field(True)
@@ -161,8 +167,7 @@ class UnboundServerSettings(BaseModel):
     trust_anchor_file: str = Field("")
     root_hints: str = Field("")
     domain_insecure: list[str] = Field(
-        default_factory=list,
-        description="Domains exempt from DNSSEC validation."
+        default_factory=list, description="Domains exempt from DNSSEC validation."
     )
 
     # --- Logging ---
@@ -178,6 +183,7 @@ ListFormat = Literal["domains", "hosts", "adblock"]
 
 class AdlistSource(BaseModel):
     """A single blocklist source."""
+
     url: str = Field(description="URL of the blocklist to fetch.")
     format: ListFormat = Field(
         default="domains",
@@ -186,10 +192,11 @@ class AdlistSource(BaseModel):
             "'domains': one bare domain per line. "
             "'hosts': /etc/hosts style (0.0.0.0 or 127.0.0.1 prefix). "
             "'adblock': AdBlock filter syntax (||domain.com^)."
-        )
+        ),
     )
 
 
 class AdlistConfig(BaseModel):
     """Root model for adlists_sources.yml."""
+
     sources: list[AdlistSource]

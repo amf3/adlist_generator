@@ -11,7 +11,9 @@ from .writer import ConfigurationWriter
 from .reporter import write_build_summary
 
 
-def run_pipeline(sources_path: str, local_dns_path: str, server_config_path: str, output_dir: str):
+def run_pipeline(
+    sources_path: str, local_dns_path: str, server_config_path: str, output_dir: str
+):
     print("Loading server configuration...")
 
     try:
@@ -30,7 +32,9 @@ def run_pipeline(sources_path: str, local_dns_path: str, server_config_path: str
                     local_dns_config = LocalDNSConfig(**loaded)
                     local_zones = local_dns_config.local_dns
         except Exception as e:
-            print(f"Warning: local_dns.yml failed schema validation: {e}. Skipping local entries.")
+            print(
+                f"Warning: local_dns.yml failed schema validation: {e}. Skipping local entries."
+            )
     else:
         print(f"Info: '{local_dns_path}' not found. Proceeding without local entries.")
 
@@ -42,7 +46,9 @@ def run_pipeline(sources_path: str, local_dns_path: str, server_config_path: str
                 adlist_config = AdlistConfig(**loaded)
                 adlist_sources = adlist_config.sources
         except Exception as e:
-            print(f"Warning: adlists_sources.yml failed schema validation: {e}. Skipping.")
+            print(
+                f"Warning: adlists_sources.yml failed schema validation: {e}. Skipping."
+            )
     else:
         print(f"Info: '{sources_path}' not found. Proceeding without adlist sources.")
 
@@ -61,7 +67,11 @@ def run_pipeline(sources_path: str, local_dns_path: str, server_config_path: str
     print("Serializing trie...")
     finalized_dataset = trie.serialize_pruned_tree()
 
-    adblock_entries = [item for item in finalized_dataset if item[1] == "always_nxdomain" and not item[2]]
+    adblock_entries = [
+        item
+        for item in finalized_dataset
+        if item[1] == "always_nxdomain" and not item[2]
+    ]
     local_record_entries = [item for item in finalized_dataset if item[3] == "local"]
 
     print("Writing configuration files...")
@@ -96,9 +106,9 @@ def run_schema_export():
     os.makedirs(target_dir, exist_ok=True)
 
     schemas = [
-        (AdlistConfig,          "adlists_sources.schema.json", "adlists_sources.yml"),
-        (LocalDNSConfig,        "local_dns.schema.json",       "local_dns.yml"),
-        (UnboundServerSettings, "server_config.schema.json",   "server_config.yml"),
+        (AdlistConfig, "adlists_sources.schema.json", "adlists_sources.yml"),
+        (LocalDNSConfig, "local_dns.schema.json", "local_dns.yml"),
+        (UnboundServerSettings, "server_config.schema.json", "server_config.yml"),
     ]
 
     for model, filename, config_file in schemas:
@@ -113,12 +123,21 @@ def run_schema_export():
 
 def main():
     parser = argparse.ArgumentParser(description="Unbound DNS configuration compiler")
-    parser.add_argument("--dump-schema", action="store_true",
-                        help="Export JSON validation schemas to configs/.")
-    parser.add_argument("--config-dir", default="./configs",
-                        help="Directory containing configuration files. (Default: ./configs)")
-    parser.add_argument("--output-dir", default="./dist",
-                        help="Directory for generated output files. (Default: ./dist)")
+    parser.add_argument(
+        "--dump-schema",
+        action="store_true",
+        help="Export JSON validation schemas to configs/.",
+    )
+    parser.add_argument(
+        "--config-dir",
+        default="./configs",
+        help="Directory containing configuration files. (Default: ./configs)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="./dist",
+        help="Directory for generated output files. (Default: ./dist)",
+    )
 
     args = parser.parse_args()
 
@@ -134,7 +153,7 @@ def main():
         sources_path=sources_path,
         local_dns_path=local_dns_path,
         server_config_path=server_config_path,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
     )
 
 

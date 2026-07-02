@@ -11,10 +11,13 @@ def _make_zone(zone, policy, records):
 
 
 def _make_record(domain, records, auto_ptr=False):
-    return LocalDNSRecord(domain=domain, auto_ptr=auto_ptr, records=DNSRecords(**records))
+    return LocalDNSRecord(
+        domain=domain, auto_ptr=auto_ptr, records=DNSRecords(**records)
+    )
 
 
 # --- Adblock trie tests (unchanged behaviour) ---
+
 
 def test_top_down_pruning():
     trie = ReversedDomainTrie()
@@ -38,24 +41,33 @@ def test_child_inserted_before_parent_is_pruned():
 
 # --- Zone-grouped local DNS injection ---
 
+
 def test_zone_registered_on_injection():
     trie = ReversedDomainTrie()
-    trie.inject_local_dns([
-        _make_zone("rb.af9.us.", "transparent", [
-            _make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})
-        ])
-    ])
+    trie.inject_local_dns(
+        [
+            _make_zone(
+                "rb.af9.us.",
+                "transparent",
+                [_make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})],
+            )
+        ]
+    )
 
     assert ("rb.af9.us.", "transparent") in trie._local_zones
 
 
 def test_local_record_in_serialized_output():
     trie = ReversedDomainTrie()
-    trie.inject_local_dns([
-        _make_zone("rb.af9.us.", "transparent", [
-            _make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})
-        ])
-    ])
+    trie.inject_local_dns(
+        [
+            _make_zone(
+                "rb.af9.us.",
+                "transparent",
+                [_make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})],
+            )
+        ]
+    )
 
     finalized = trie.serialize_pruned_tree()
     domains = [item[0] for item in finalized]
@@ -86,13 +98,19 @@ def test_aliased_hosts_all_records_present():
     per-hostname local-zone declarations.
     """
     trie = ReversedDomainTrie()
-    trie.inject_local_dns([
-        _make_zone("rb.af9.us.", "transparent", [
-            _make_record("phanpy.rb.af9.us",  {"A": "192.168.10.31"}),
-            _make_record("docker02.rb.af9.us", {"A": "192.168.10.31"}),
-            _make_record("gitea.rb.af9.us",    {"A": "192.168.10.31"}),
-        ])
-    ])
+    trie.inject_local_dns(
+        [
+            _make_zone(
+                "rb.af9.us.",
+                "transparent",
+                [
+                    _make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"}),
+                    _make_record("docker02.rb.af9.us", {"A": "192.168.10.31"}),
+                    _make_record("gitea.rb.af9.us", {"A": "192.168.10.31"}),
+                ],
+            )
+        ]
+    )
 
     finalized = trie.serialize_pruned_tree()
     domains = [item[0] for item in finalized]
@@ -104,16 +122,26 @@ def test_aliased_hosts_all_records_present():
     # No entry should carry a policy — policy lives on the zone, not the record.
     local_entries = [item for item in finalized if item[3] == "local"]
     for domain, policy, records, source in local_entries:
-        assert policy == "", f"{domain} should have no per-record policy, got '{policy}'"
+        assert (
+            policy == ""
+        ), f"{domain} should have no per-record policy, got '{policy}'"
 
 
 def test_auto_ptr_synthesized():
     trie = ReversedDomainTrie()
-    trie.inject_local_dns([
-        _make_zone("rb.af9.us.", "transparent", [
-            _make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"}, auto_ptr=True)
-        ])
-    ])
+    trie.inject_local_dns(
+        [
+            _make_zone(
+                "rb.af9.us.",
+                "transparent",
+                [
+                    _make_record(
+                        "phanpy.rb.af9.us", {"A": "192.168.10.31"}, auto_ptr=True
+                    )
+                ],
+            )
+        ]
+    )
 
     finalized = trie.serialize_pruned_tree()
     domains = [item[0] for item in finalized]
@@ -125,14 +153,20 @@ def test_auto_ptr_synthesized():
 
 def test_multiple_zones():
     trie = ReversedDomainTrie()
-    trie.inject_local_dns([
-        _make_zone("rb.af9.us.", "transparent", [
-            _make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})
-        ]),
-        _make_zone("foo.rb.af9.us.", "always_nxdomain", [
-            _make_record("foo.rb.af9.us", {"A": "0.0.0.0"})
-        ]),
-    ])
+    trie.inject_local_dns(
+        [
+            _make_zone(
+                "rb.af9.us.",
+                "transparent",
+                [_make_record("phanpy.rb.af9.us", {"A": "192.168.10.31"})],
+            ),
+            _make_zone(
+                "foo.rb.af9.us.",
+                "always_nxdomain",
+                [_make_record("foo.rb.af9.us", {"A": "0.0.0.0"})],
+            ),
+        ]
+    )
 
     assert len(trie._local_zones) == 2
     assert ("rb.af9.us.", "transparent") in trie._local_zones

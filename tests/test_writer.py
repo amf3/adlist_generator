@@ -20,9 +20,9 @@ def test_local_records_emits_zone_then_data(tmp_path):
     """
     local_zones = [("rb.af9.us.", "transparent")]
     mock_data = [
-        ("phanpy.rb.af9.us",  "", {"A": "192.168.10.31"}, "local"),
+        ("phanpy.rb.af9.us", "", {"A": "192.168.10.31"}, "local"),
         ("docker02.rb.af9.us", "", {"CNAME": "phanpy.rb.af9.us."}, "local"),
-        ("gitea.rb.af9.us",    "", {"CNAME": "docker02.rb.af9.us."}, "local"),
+        ("gitea.rb.af9.us", "", {"CNAME": "docker02.rb.af9.us."}, "local"),
     ]
 
     writer = _make_writer(mock_data, local_zones=local_zones, port=53, num_threads=1)
@@ -48,7 +48,7 @@ def test_local_records_emits_zone_then_data(tmp_path):
 def test_ptr_records_emitted_without_zone_declaration(tmp_path):
     local_zones = [("rb.af9.us.", "transparent")]
     mock_data = [
-        ("phanpy.rb.af9.us",          "", {"A": "192.168.10.31"}, "local"),
+        ("phanpy.rb.af9.us", "", {"A": "192.168.10.31"}, "local"),
         ("31.10.168.192.in-addr.arpa", "", {"PTR": "phanpy.rb.af9.us."}, "local"),
     ]
 
@@ -57,7 +57,9 @@ def test_ptr_records_emitted_without_zone_declaration(tmp_path):
 
     content = (tmp_path / "local_records.conf").read_text()
 
-    assert 'local-data: "31.10.168.192.in-addr.arpa. IN PTR phanpy.rb.af9.us."' in content
+    assert (
+        'local-data: "31.10.168.192.in-addr.arpa. IN PTR phanpy.rb.af9.us."' in content
+    )
     assert 'local-zone: "31.10.168.192.in-addr.arpa"' not in content
 
 
@@ -68,7 +70,7 @@ def test_multiple_zones_each_get_header(tmp_path):
     ]
     mock_data = [
         ("phanpy.rb.af9.us", "", {"A": "192.168.10.31"}, "local"),
-        ("foo.rb.af9.us",    "", {"A": "0.0.0.0"}, "local"),
+        ("foo.rb.af9.us", "", {"A": "0.0.0.0"}, "local"),
     ]
 
     writer = _make_writer(mock_data, local_zones=local_zones, port=53, num_threads=1)
